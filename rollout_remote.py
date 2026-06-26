@@ -58,8 +58,8 @@ def run_rollout(
     device_str: str,
 ) -> None:
     from lerobot.policies.act.modeling_act import ACTPolicy
+    from lerobot.policies.factory import make_pre_post_processors
     from lerobot.policies.utils import build_inference_frame
-    from lerobot.utils.feature_utils import build_dataset_frame
 
     device = torch.device(device_str)
 
@@ -68,6 +68,16 @@ def run_rollout(
     policy.eval()
     policy.to(device)
 
+    # Load the pre/post-processor pipelines stored in the checkpoint.
+    # The preprocessor normalizes observations (MEAN_STD); the postprocessor
+    # denormalizes actions back to motor degree units. Both are required —
+    # predict_action_chunk expects normalized inputs and returns normalized outputs.
+    preprocessor, postprocessor = make_pre_post_processors(
+        policy_cfg=policy.config,
+        pretrained_path=policy_path,
+        preprocessor_overrides={"device_processor": {"device": device_str}},
+    )
+
     ds_features = _load_ds_features(policy_path)
 
     log.info("Connecting to Pi at %s:%d ...", robot_host, robot_port)
@@ -75,7 +85,7 @@ def run_rollout(
     robot.connect()
     log.info("Connected")
 
-    action_chunk: torch.Tensor | None = None  # shape [1, chunk_size, 6] when loaded
+    action_chunk: torch.Tensor | None = None  # [chunk_size, 6] in motor-degree units
     chunk_idx = 0
 
     inference_times: list[float] = []
@@ -92,6 +102,7 @@ def run_rollout(
             t_tick = time.perf_counter()
             obs = robot.get_observation()
 
+            # Build tensor dict and normalize (matches what the RTC engine does on Pi)
             obs_frame = build_inference_frame(
                 obs,
                 device=device,
@@ -99,17 +110,20 @@ def run_rollout(
                 task=task,
                 robot_type="so101_follower",
             )
+            obs_frame["task"] = [task]  # preprocessor expects a list
+            obs_preprocessed = preprocessor(obs_frame)
 
-            if action_chunk is None or chunk_idx >= action_chunk.shape[1]:
+            if action_chunk is None or chunk_idx >= len(action_chunk):
                 t_inf = time.perf_counter()
                 with torch.inference_mode():
-                    action_chunk = policy.predict_action_chunk(obs_frame)  # [1, chunk_size, 6]
+                    raw_actions = policy.predict_action_chunk(obs_preprocessed)  # [1, chunk_size, 6] normalized
+                    action_chunk = postprocessor(raw_actions).squeeze(0).cpu()   # [chunk_size, 6] in degrees
                 inf_time = time.perf_counter() - t_inf
                 inference_times.append(inf_time)
                 chunk_idx = 0
-                log.info("inference %.3fs  chunk_size=%d", inf_time, action_chunk.shape[1])
+                log.info("inference %.3fs  chunk_size=%d", inf_time, len(action_chunk))
 
-            action_tensor = action_chunk[0, chunk_idx].cpu()  # [6]
+            action_tensor = action_chunk[chunk_idx]  # [6]
             chunk_idx += 1
 
             action_dict = {k: action_tensor[i].item() for i, k in enumerate(MOTOR_KEYS)}
