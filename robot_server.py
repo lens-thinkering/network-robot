@@ -29,6 +29,7 @@ import socket
 import struct
 import time
 
+import cv2
 import msgpack
 import numpy as np
 
@@ -77,16 +78,17 @@ def _recv_msg(sock: socket.socket) -> bytes:
 # Serialization helpers
 # ---------------------------------------------------------------------------
 
-def _obs_to_packet(obs: dict) -> dict:
+def _obs_to_packet(obs: dict, jpeg_quality: int = 85) -> dict:
     motor_pos = [float(obs[k]) for k in MOTOR_KEYS]
     wrist_img: np.ndarray = obs[WRIST_CAM_KEY]
     front_img: np.ndarray = obs[FRONT_CAM_KEY]
+    # Cameras output RGB; cv2.imencode expects BGR — swap channels before encoding
+    _, wrist_enc = cv2.imencode(".jpg", wrist_img[:, :, ::-1], [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
+    _, front_enc = cv2.imencode(".jpg", front_img[:, :, ::-1], [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
     return {
         "motor_pos": motor_pos,
-        "wrist_img": wrist_img.tobytes(),
-        "front_img": front_img.tobytes(),
-        "wrist_shape": list(wrist_img.shape),
-        "front_shape": list(front_img.shape),
+        "wrist_img": wrist_enc.tobytes(),
+        "front_img": front_enc.tobytes(),
         "timestamp": time.time(),
     }
 

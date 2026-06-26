@@ -14,6 +14,7 @@ import socket
 import struct
 import time
 
+import cv2
 import msgpack
 import numpy as np
 
@@ -85,10 +86,11 @@ class NetworkRobot:
 
         obs = {k: packet["motor_pos"][i] for i, k in enumerate(MOTOR_KEYS)}
 
-        wrist_shape = tuple(packet["wrist_shape"])
-        front_shape = tuple(packet["front_shape"])
-        obs["wrist"] = np.frombuffer(packet["wrist_img"], dtype=np.uint8).reshape(wrist_shape)
-        obs["front"] = np.frombuffer(packet["front_img"], dtype=np.uint8).reshape(front_shape)
+        # Decode JPEG; cv2.imdecode returns BGR so convert back to RGB
+        wrist_buf = np.frombuffer(packet["wrist_img"], dtype=np.uint8)
+        front_buf = np.frombuffer(packet["front_img"], dtype=np.uint8)
+        obs["wrist"] = cv2.imdecode(wrist_buf, cv2.IMREAD_COLOR)[:, :, ::-1]
+        obs["front"] = cv2.imdecode(front_buf, cv2.IMREAD_COLOR)[:, :, ::-1]
         obs["timestamp"] = packet["timestamp"]
 
         return obs
