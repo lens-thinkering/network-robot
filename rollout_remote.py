@@ -26,28 +26,27 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 
-def _load_ds_features(policy_path: str) -> dict:
-    """Load dataset features from the policy checkpoint directory."""
-    meta_path = Path(policy_path) / "meta" / "info.json"
-    if not meta_path.exists():
-        meta_path = Path(policy_path) / "dataset_meta" / "info.json"
-    if meta_path.exists():
-        with open(meta_path) as f:
-            info = json.load(f)
-        return info["features"]
+def _load_ds_features(policy_path: str, dataset_repo: str = "l-e-n/so101_pick_place_50-merged") -> dict:
+    """Load dataset features, falling back to a HuggingFace download if not cached locally."""
+    for meta_path in [
+        Path(policy_path) / "meta" / "info.json",
+        Path(policy_path) / "dataset_meta" / "info.json",
+        Path.home() / ".cache/huggingface/lerobot" / dataset_repo / "meta/info.json",
+    ]:
+        if meta_path.exists():
+            log.info("Loaded ds_features from %s", meta_path)
+            with open(meta_path) as f:
+                return json.load(f)["features"]
 
-    # Fallback: load from the cached dataset metadata
-    dataset_meta = Path.home() / ".cache/huggingface/lerobot/l-e-n/so101_pick_place_50-merged/meta/info.json"
-    if dataset_meta.exists():
-        with open(dataset_meta) as f:
-            info = json.load(f)
-        log.info("Loaded ds_features from dataset cache at %s", dataset_meta)
-        return info["features"]
-
-    raise FileNotFoundError(
-        f"Could not find info.json in {policy_path} or dataset cache. "
-        "Pass --dataset-meta /path/to/meta/info.json explicitly."
+    log.info("Downloading dataset metadata from HuggingFace (%s)...", dataset_repo)
+    from huggingface_hub import hf_hub_download
+    info_path = hf_hub_download(
+        repo_id=dataset_repo,
+        filename="meta/info.json",
+        repo_type="dataset",
     )
+    with open(info_path) as f:
+        return json.load(f)["features"]
 
 
 def run_rollout(
