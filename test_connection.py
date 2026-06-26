@@ -29,8 +29,9 @@ def run_test(host: str, port: int, n: int) -> None:
         t0 = time.perf_counter()
         obs = robot.get_observation()
 
-        zero_action = {k: 0.0 for k in MOTOR_KEYS}
-        robot.send_action(zero_action)
+        # Echo current positions back so the arm doesn't move during the test
+        hold_action = {k: obs[k] for k in MOTOR_KEYS}
+        robot.send_action(hold_action)
 
         rtt = time.perf_counter() - t0
         rtt_times.append(rtt)
