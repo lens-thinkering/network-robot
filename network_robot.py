@@ -89,8 +89,8 @@ class NetworkRobot:
         # Decode JPEG; cv2.imdecode returns BGR so convert back to RGB
         wrist_buf = np.frombuffer(packet["wrist_img"], dtype=np.uint8)
         front_buf = np.frombuffer(packet["front_img"], dtype=np.uint8)
-        obs["wrist"] = cv2.imdecode(wrist_buf, cv2.IMREAD_COLOR)[:, :, ::-1]
-        obs["front"] = cv2.imdecode(front_buf, cv2.IMREAD_COLOR)[:, :, ::-1]
+        obs["wrist"] = cv2.imdecode(wrist_buf, cv2.IMREAD_COLOR)[:, :, ::-1].copy()
+        obs["front"] = cv2.imdecode(front_buf, cv2.IMREAD_COLOR)[:, :, ::-1].copy()
         obs["timestamp"] = packet["timestamp"]
 
         return obs
