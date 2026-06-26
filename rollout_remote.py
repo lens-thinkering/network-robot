@@ -59,14 +59,13 @@ def run_rollout(
     device_str: str,
 ) -> None:
     from lerobot.policies.act.modeling_act import ACTPolicy
-    from lerobot.policies.pretrained import PreTrainedPolicy
     from lerobot.policies.utils import build_inference_frame
     from lerobot.utils.feature_utils import build_dataset_frame
 
     device = torch.device(device_str)
 
     log.info("Loading policy from %s ...", policy_path)
-    policy: PreTrainedPolicy = PreTrainedPolicy.from_pretrained(policy_path)
+    policy = ACTPolicy.from_pretrained(policy_path)
     policy.eval()
     policy.to(device)
 
